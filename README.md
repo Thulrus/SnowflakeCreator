@@ -8,6 +8,8 @@ A browser-based TypeScript application for designing symmetrical snowflakes with
 
 - ✨ **Twelve-fold symmetry**: Draw in a 30° wedge with automatic mirroring and six-fold rotation
 - 🎨 **Vector-based drawing**: All paths are true SVG vectors, no rasterization
+- 🧲 **Endpoint snapping**: Paths automatically snap together when endpoints are close (within 15px)
+- 🎭 **Fill visualization**: Toggle to see which areas will be paper (dark) vs. cut away (light)
 - 🔧 **Laser-cutter ready**: Export to SVG with optimal settings for laser cutting software
 - 🖱️ **Intuitive controls**: Draw, undo, clear, and adjust stroke width
 - 🔍 **Zoom and pan**: Mouse wheel zoom and drag panning for precision
@@ -91,7 +93,9 @@ npm run preview
 
 1. Click and drag in the visible 30° wedge to draw paths
 2. Your strokes will automatically be mirrored and replicated with twelve-fold symmetry
-3. Use the stroke width selector to adjust line thickness
+3. Path endpoints will automatically snap together when within 15 pixels for cleaner cuts
+4. Use the stroke width selector to adjust line thickness
+5. Toggle "Show Fill" to visualize which areas will be paper vs. cut holes
 
 ### Controls
 

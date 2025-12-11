@@ -293,4 +293,42 @@ export class SymmetryManager {
     
     return transformedData.trim();
   }
+
+  /**
+   * Gets all endpoints from the fully rendered snowflake (with transforms applied).
+   * This is used for snapping - we want to snap to all visible endpoints, not just the wedge.
+   * 
+   * @returns Array of points representing all path endpoints in the snowflake
+   */
+  public getAllBakedEndpoints(): { x: number; y: number }[] {
+    const endpoints: { x: number; y: number }[] = [];
+    const bakedPaths = this.generateBakedPaths();
+    
+    for (const path of bakedPaths) {
+      const pathData = path.getAttribute('d');
+      if (!pathData) continue;
+      
+      // Parse path data to get first and last coordinate pairs
+      const commandRegex = /([MLQC])\s*([-\d.,\s]+)/gi;
+      const matches = Array.from(pathData.matchAll(commandRegex));
+      
+      if (matches.length === 0) continue;
+      
+      // Get first point (from first command)
+      const firstCoords = matches[0][2].trim().split(/[\s,]+/).map(parseFloat).filter(n => !isNaN(n));
+      if (firstCoords.length >= 2) {
+        endpoints.push({ x: firstCoords[0], y: firstCoords[1] });
+      }
+      
+      // Get last point (from last command)
+      const lastMatch = matches[matches.length - 1];
+      const lastCoords = lastMatch[2].trim().split(/[\s,]+/).map(parseFloat).filter(n => !isNaN(n));
+      if (lastCoords.length >= 2) {
+        // Last coordinate pair is at the end of the coordinates array
+        endpoints.push({ x: lastCoords[lastCoords.length - 2], y: lastCoords[lastCoords.length - 1] });
+      }
+    }
+    
+    return endpoints;
+  }
 }

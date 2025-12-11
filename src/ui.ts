@@ -7,6 +7,7 @@
 import { DrawingManager } from './drawing';
 import { SymmetryManager } from './symmetry';
 import { ExportManager } from './export';
+import { FillVisualization } from './visualization';
 
 /**
  * Manages UI interactions and coordinates between different modules.
@@ -15,6 +16,7 @@ export class UIManager {
   private drawingManager: DrawingManager;
   private symmetryManager: SymmetryManager;
   private exportManager: ExportManager;
+  private fillVisualization: FillVisualization;
   private svg: SVGSVGElement;
 
   // UI elements
@@ -22,6 +24,7 @@ export class UIManager {
   private btnUndo: HTMLButtonElement;
   private btnClear: HTMLButtonElement;
   private btnExport: HTMLButtonElement;
+  private btnToggleFill: HTMLButtonElement;
   private strokeWidthSelect: HTMLSelectElement;
 
   // Zoom and pan state
@@ -34,11 +37,13 @@ export class UIManager {
     drawingManager: DrawingManager,
     symmetryManager: SymmetryManager,
     exportManager: ExportManager,
+    fillVisualization: FillVisualization,
     svg: SVGSVGElement
   ) {
     this.drawingManager = drawingManager;
     this.symmetryManager = symmetryManager;
     this.exportManager = exportManager;
+    this.fillVisualization = fillVisualization;
     this.svg = svg;
 
     // Get UI elements
@@ -46,6 +51,7 @@ export class UIManager {
     this.btnUndo = document.getElementById('btn-undo') as HTMLButtonElement;
     this.btnClear = document.getElementById('btn-clear') as HTMLButtonElement;
     this.btnExport = document.getElementById('btn-export') as HTMLButtonElement;
+    this.btnToggleFill = document.getElementById('btn-toggle-fill') as HTMLButtonElement;
     this.strokeWidthSelect = document.getElementById('stroke-width') as HTMLSelectElement;
 
     this.initializeEventListeners();
@@ -61,6 +67,7 @@ export class UIManager {
     this.btnUndo.addEventListener('click', () => this.handleUndo());
     this.btnClear.addEventListener('click', () => this.handleClear());
     this.btnExport.addEventListener('click', () => this.handleExport());
+    this.btnToggleFill.addEventListener('click', () => this.handleToggleFill());
 
     // Stroke width selector
     this.strokeWidthSelect.addEventListener('change', () => {
@@ -100,6 +107,9 @@ export class UIManager {
     const lastStroke = strokes[strokes.length - 1];
     this.symmetryManager.removeStroke(lastStroke);
     this.drawingManager.undoLastStroke();
+    
+    // Update fill visualization
+    this.fillVisualization.update();
   }
 
   /**
@@ -111,6 +121,9 @@ export class UIManager {
     if (confirm('Clear all strokes? This cannot be undone.')) {
       this.drawingManager.clearAll();
       this.symmetryManager.clearAll();
+      
+      // Update fill visualization
+      this.fillVisualization.update();
     }
   }
 
@@ -122,6 +135,34 @@ export class UIManager {
       this.exportManager.exportToFile('snowflake.svg');
     } catch (error) {
       console.error('Export error:', error);
+    }
+  }
+
+  /**
+   * Handles toggle fill visualization.
+   */
+  private handleToggleFill(): void {
+    this.fillVisualization.toggle();
+    
+    // Update button appearance
+    if (this.fillVisualization.getEnabled()) {
+      this.btnToggleFill.classList.add('active');
+      this.btnToggleFill.textContent = '';
+      this.btnToggleFill.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 20 20">
+          <rect x="3" y="3" width="14" height="14" fill="currentColor" opacity="0.5" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        Hide Fill
+      `;
+    } else {
+      this.btnToggleFill.classList.remove('active');
+      this.btnToggleFill.textContent = '';
+      this.btnToggleFill.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 20 20">
+          <rect x="3" y="3" width="14" height="14" fill="currentColor" opacity="0.5" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        Show Fill
+      `;
     }
   }
 
@@ -278,6 +319,9 @@ export class UIManager {
         this.symmetryManager.updateStroke(stroke);
       }
       currentPathElement = null;
+      
+      // Update fill visualization
+      this.fillVisualization.update();
     });
   }
 }

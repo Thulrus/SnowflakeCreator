@@ -10,6 +10,7 @@ import { DrawingManager } from './drawing';
 import { SymmetryManager } from './symmetry';
 import { ExportManager } from './export';
 import { UIManager } from './ui';
+import { FillVisualization } from './visualization';
 
 /**
  * Application initialization.
@@ -28,10 +29,11 @@ function initializeApp(): void {
   }
 
   // Initialize managers
-  const drawingManager = new DrawingManager(svg, wedgeLayer);
   const symmetryManager = new SymmetryManager(snowflakeLayer);
+  const drawingManager = new DrawingManager(svg, wedgeLayer, symmetryManager);
   const exportManager = new ExportManager(symmetryManager);
-  const uiManager = new UIManager(drawingManager, symmetryManager, exportManager, svg);
+  const fillVisualization = new FillVisualization(svg, symmetryManager);
+  const uiManager = new UIManager(drawingManager, symmetryManager, exportManager, fillVisualization, svg);
 
   // Connect drawing to symmetry
   uiManager.setupDrawingSymmetry();

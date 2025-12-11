@@ -5,6 +5,9 @@
  * Captures pointer events and converts them into SVG path elements.
  */
 
+import { snapToNearestSnowflakeEndpoint } from './snapping';
+import { SymmetryManager } from './symmetry';
+
 export interface Point {
   x: number;
   y: number;
@@ -90,6 +93,7 @@ export function pointsToPathData(points: Point[]): string {
 export class DrawingManager {
   private wedgeLayer: SVGGElement;
   private svg: SVGSVGElement;
+  private symmetryManager: SymmetryManager;
   private currentStroke: Point[] = [];
   private currentPath: SVGPathElement | null = null;
   private strokes: Stroke[] = [];
@@ -97,10 +101,47 @@ export class DrawingManager {
   private strokeWidth = 2;
   private onStrokeComplete?: (stroke: Stroke) => void;
   private onStrokeUpdate?: (stroke: Stroke) => void;
+  private snapIndicator: SVGCircleElement | null = null;
 
-  constructor(svg: SVGSVGElement, wedgeLayer: SVGGElement) {
+  constructor(svg: SVGSVGElement, wedgeLayer: SVGGElement, symmetryManager: SymmetryManager) {
     this.svg = svg;
     this.wedgeLayer = wedgeLayer;
+    this.symmetryManager = symmetryManager;
+    this.createSnapIndicator();
+  }
+
+  /**
+   * Creates a visual indicator for snap points.
+   */
+  private createSnapIndicator(): void {
+    this.snapIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    this.snapIndicator.setAttribute('r', '8');
+    this.snapIndicator.setAttribute('fill', 'none');
+    this.snapIndicator.setAttribute('stroke', '#00ff00');
+    this.snapIndicator.setAttribute('stroke-width', '2');
+    this.snapIndicator.setAttribute('pointer-events', 'none');
+    this.snapIndicator.style.display = 'none';
+    this.svg.appendChild(this.snapIndicator);
+  }
+
+  /**
+   * Shows the snap indicator at a position.
+   */
+  private showSnapIndicator(point: Point): void {
+    if (this.snapIndicator) {
+      this.snapIndicator.setAttribute('cx', point.x.toString());
+      this.snapIndicator.setAttribute('cy', point.y.toString());
+      this.snapIndicator.style.display = 'block';
+    }
+  }
+
+  /**
+   * Hides the snap indicator.
+   */
+  private hideSnapIndicator(): void {
+    if (this.snapIndicator) {
+      this.snapIndicator.style.display = 'none';
+    }
   }
 
   /**
@@ -166,9 +207,17 @@ export class DrawingManager {
    * Handles pointer down event to start a new stroke.
    */
   public handlePointerDown = (event: PointerEvent): void => {
-    const point = this.screenToSVG(event.clientX, event.clientY);
+    let point = this.screenToSVG(event.clientX, event.clientY);
     
     if (!isPointInWedge(point)) return;
+    
+    // Snap to nearby endpoints from the full snowflake
+    const snappedPoint = snapToNearestSnowflakeEndpoint(point, this.symmetryManager);
+    if (snappedPoint.x !== point.x || snappedPoint.y !== point.y) {
+      point = snappedPoint;
+      this.showSnapIndicator(point);
+      setTimeout(() => this.hideSnapIndicator(), 200);
+    }
     
     this.isDrawing = true;
     this.currentStroke = [point];
@@ -215,6 +264,23 @@ export class DrawingManager {
     this.isDrawing = false;
     
     if (this.currentStroke.length > 0) {
+      // Snap the last point to nearby endpoints from the full snowflake
+      const lastPoint = this.currentStroke[this.currentStroke.length - 1];
+      const snappedEnd = snapToNearestSnowflakeEndpoint(lastPoint, this.symmetryManager);
+      
+      if (snappedEnd.x !== lastPoint.x || snappedEnd.y !== lastPoint.y) {
+        // Update the last point
+        this.currentStroke[this.currentStroke.length - 1] = snappedEnd;
+        
+        // Update the path data
+        const pathData = pointsToPathData(this.currentStroke);
+        this.currentPath.setAttribute('d', pathData);
+        
+        // Show snap indicator briefly
+        this.showSnapIndicator(snappedEnd);
+        setTimeout(() => this.hideSnapIndicator(), 300);
+      }
+      
       const stroke: Stroke = {
         points: [...this.currentStroke],
         pathElement: this.currentPath
