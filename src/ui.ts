@@ -33,6 +33,12 @@ export class UIManager {
   private panStart = { x: 0, y: 0 };
   private scale = 1;
 
+  // Touch state
+  private touchStartDistance = 0;
+  private touchStartScale = 1;
+  private touchStartViewBox = { x: 0, y: 0, width: 1000, height: 1000 };
+  private touchCount = 0;
+
   constructor(
     drawingManager: DrawingManager,
     symmetryManager: SymmetryManager,
@@ -78,6 +84,12 @@ export class UIManager {
     this.svg.addEventListener('mousemove', (e) => this.handlePanMove(e));
     this.svg.addEventListener('mouseup', () => this.handlePanEnd());
     this.svg.addEventListener('mouseleave', () => this.handlePanEnd());
+
+    // Touch events for pinch-zoom and two-finger pan
+    this.svg.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
+    this.svg.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
+    this.svg.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
+    this.svg.addEventListener('touchcancel', (e) => this.handleTouchEnd(e), { passive: false });
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => this.handleKeyboard(e));
@@ -331,5 +343,113 @@ export class UIManager {
       // Update fill visualization
       this.fillVisualization.update();
     });
+  }
+
+  /**
+   * Calculates the distance between two touch points.
+   */
+  private getTouchDistance(touch1: Touch, touch2: Touch): number {
+    const dx = touch2.clientX - touch1.clientX;
+    const dy = touch2.clientY - touch1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /**
+   * Gets the center point between two touches.
+   */
+  private getTouchCenter(touch1: Touch, touch2: Touch): { x: number; y: number } {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2
+    };
+  }
+
+  /**
+   * Handles touch start for pinch-zoom and two-finger pan.
+   */
+  private handleTouchStart(event: TouchEvent): void {
+    this.touchCount = event.touches.length;
+
+    if (this.touchCount === 2) {
+      // Two fingers: prepare for pinch-zoom or pan
+      event.preventDefault();
+      this.drawingManager.disable();
+
+      const touch1 = event.touches[0];
+      const touch2 = event.touches[1];
+
+      this.touchStartDistance = this.getTouchDistance(touch1, touch2);
+      this.touchStartScale = this.scale;
+      this.touchStartViewBox = { ...this.viewBox };
+
+      const center = this.getTouchCenter(touch1, touch2);
+      this.panStart = center;
+      this.isPanning = true;
+    }
+    // Single finger: let drawing manager handle it
+  }
+
+  /**
+   * Handles touch move for pinch-zoom and two-finger pan.
+   */
+  private handleTouchMove(event: TouchEvent): void {
+    if (event.touches.length === 2 && this.touchCount === 2) {
+      event.preventDefault();
+
+      const touch1 = event.touches[0];
+      const touch2 = event.touches[1];
+
+      // Calculate pinch-zoom
+      const currentDistance = this.getTouchDistance(touch1, touch2);
+      const scaleChange = currentDistance / this.touchStartDistance;
+      this.scale = this.touchStartScale / scaleChange;
+      this.scale = Math.max(0.1, Math.min(10, this.scale));
+
+      // Calculate center point for zoom
+      const center = this.getTouchCenter(touch1, touch2);
+      const rect = this.svg.getBoundingClientRect();
+      
+      // Convert center to SVG coordinates at start scale
+      const svgCenterX = this.touchStartViewBox.x + (center.x - rect.left) / rect.width * this.touchStartViewBox.width;
+      const svgCenterY = this.touchStartViewBox.y + (center.y - rect.top) / rect.height * this.touchStartViewBox.height;
+
+      // Calculate new viewBox dimensions
+      const newWidth = 1000 / this.scale;
+      const newHeight = 1000 / this.scale;
+
+      // Calculate pan delta
+      const dx = center.x - this.panStart.x;
+      const dy = center.y - this.panStart.y;
+      const scaleX = this.touchStartViewBox.width / rect.width;
+      const scaleY = this.touchStartViewBox.height / rect.height;
+
+      // Apply zoom centered on pinch point, plus pan
+      const centerRatioX = (center.x - rect.left) / rect.width;
+      const centerRatioY = (center.y - rect.top) / rect.height;
+      
+      this.viewBox.x = svgCenterX - centerRatioX * newWidth - dx * scaleX;
+      this.viewBox.y = svgCenterY - centerRatioY * newHeight - dy * scaleY;
+      this.viewBox.width = newWidth;
+      this.viewBox.height = newHeight;
+
+      this.updateViewBox();
+    }
+  }
+
+  /**
+   * Handles touch end.
+   */
+  private handleTouchEnd(event: TouchEvent): void {
+    this.touchCount = event.touches.length;
+
+    if (this.touchCount < 2) {
+      this.isPanning = false;
+      this.touchStartDistance = 0;
+      
+      // Re-enable drawing if in draw mode
+      if (this.btnDraw.classList.contains('active') || this.btnLine.classList.contains('active')) {
+        this.drawingManager.enable();
+      }
+    }
   }
 }
