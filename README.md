@@ -4,21 +4,20 @@ A browser-based TypeScript application for designing symmetrical snowflakes with
 
 ![Snowflake Creator](https://img.shields.io/badge/TypeScript-5.3-blue) ![Vite](https://img.shields.io/badge/Vite-5.0-purple)
 
+## 🚀 Live Demo
+
+**[Try it now!](https://thulrus.github.io/SnowflakeCreator/)**
+
 ## Features
 
 - ✨ **Twelve-fold symmetry**: Draw in a 30° wedge with automatic mirroring and six-fold rotation
-- 🎨 **Vector-based drawing**: All paths are true SVG vectors, no rasterization
-- 🧲 **Endpoint snapping**: Paths automatically snap together when endpoints are close (within 15px)
-- 🎭 **Fill visualization**: Toggle to see which areas will be paper (dark) vs. cut away (light)
+- 🎨 **Freehand & line tools**: Draw freely or create straight lines with precision
+- 🧲 **Endpoint snapping**: Paths automatically snap together when endpoints are close (within 5px)
 - 🔧 **Laser-cutter ready**: Export to SVG with optimal settings for laser cutting software
-- 🖱️ **Intuitive controls**: Draw, undo, clear, and adjust stroke width
-- 🔍 **Zoom and pan**: Mouse wheel zoom and drag panning for precision
+- 🖱️ **Intuitive controls**: Draw, undo, clear with simple toolbar buttons
+- 🔍 **Zoom and pan**: Mouse wheel zoom and middle-click pan for precision
 - ⌨️ **Keyboard shortcuts**: Efficient workflow with hotkeys
 - 📦 **No backend required**: Fully client-side application
-
-## Live Demo
-
-After building, open `dist/index.html` in your browser or deploy to any static hosting service.
 
 ## Project Structure
 
