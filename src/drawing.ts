@@ -8,6 +8,8 @@
 import { snapToNearestSnowflakeEndpoint } from './snapping';
 import { SymmetryManager } from './symmetry';
 
+export type DrawMode = 'freehand' | 'line';
+
 export interface Point {
   x: number;
   y: number;
@@ -21,6 +23,7 @@ export interface Stroke {
 /**
  * Checks if a point is inside the 30° wedge.
  * The wedge is defined from center (500, 500) with edges at 0° and 30°.
+ * Also limits to within a 400px radius circle.
  * 
  * @param point - The point to check
  * @param center - The center of the wedge
@@ -30,12 +33,95 @@ export function isPointInWedge(point: Point, center: Point = { x: 500, y: 500 })
   const dx = point.x - center.x;
   const dy = point.y - center.y;
   
+  // Check if within radius
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance > 400) return false;
+  
   // Calculate angle from center (0° is up, increasing clockwise)
   let angle = Math.atan2(dx, -dy) * (180 / Math.PI);
   if (angle < 0) angle += 360;
   
   // Wedge spans from 0° to 30°
   return angle >= 0 && angle <= 30;
+}
+
+/**
+ * Clips a line to the wedge boundaries.
+ * If the line goes outside the wedge, returns the intersection point at the boundary.
+ * 
+ * @param start - Starting point (must be inside wedge)
+ * @param end - Ending point (may be outside wedge)
+ * @param center - The center of the wedge
+ * @returns The clipped end point
+ */
+export function clipLineToWedge(start: Point, end: Point, center: Point = { x: 500, y: 500 }): Point {
+  // If end is already inside, no clipping needed
+  if (isPointInWedge(end, center)) {
+    return end;
+  }
+  
+  // Check which boundary the line crosses
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  
+  let closestIntersection = end;
+  let minT = Infinity;
+  
+  // Check intersection with radius boundary (circle at 400px)
+  const a = dx * dx + dy * dy;
+  const b = 2 * ((start.x - center.x) * dx + (start.y - center.y) * dy);
+  const c = (start.x - center.x) ** 2 + (start.y - center.y) ** 2 - 400 * 400;
+  const discriminant = b * b - 4 * a * c;
+  
+  if (discriminant >= 0) {
+    const t = (-b + Math.sqrt(discriminant)) / (2 * a);
+    if (t > 0 && t < 1 && t < minT) {
+      minT = t;
+      closestIntersection = {
+        x: start.x + t * dx,
+        y: start.y + t * dy
+      };
+    }
+  }
+  
+  // Check intersection with 0° line (vertical line at x = center.x, y < center.y)
+  if (dx !== 0) {
+    const t = (center.x - start.x) / dx;
+    if (t > 0 && t < 1 && t < minT) {
+      const intersectY = start.y + t * dy;
+      if (intersectY <= center.y) {
+        minT = t;
+        closestIntersection = {
+          x: center.x,
+          y: intersectY
+        };
+      }
+    }
+  }
+  
+  // Check intersection with 30° line
+  // Line equation: passes through center with angle 30°
+  // Direction: (sin(30°), -cos(30°)) = (0.5, -0.866)
+  const angle30 = 30 * Math.PI / 180;
+  const lineDir = { x: Math.sin(angle30), y: -Math.cos(angle30) };
+  
+  // Parametric line intersection
+  // start + t * (end - start) = center + s * lineDir
+  const det = dx * lineDir.y - dy * lineDir.x;
+  if (Math.abs(det) > 0.0001) {
+    const t = ((center.x - start.x) * lineDir.y - (center.y - start.y) * lineDir.x) / det;
+    const s = ((center.x - start.x) * dy - (center.y - start.y) * dx) / det;
+    
+    if (t > 0 && t < 1 && s > 0 && t < minT) {
+      minT = t;
+      closestIntersection = {
+        x: start.x + t * dx,
+        y: start.y + t * dy
+      };
+    }
+  }
+  
+  return closestIntersection;
 }
 
 /**
@@ -102,12 +188,15 @@ export class DrawingManager {
   private onStrokeComplete?: (stroke: Stroke) => void;
   private onStrokeUpdate?: (stroke: Stroke) => void;
   private snapIndicator: SVGCircleElement | null = null;
+  private mode: DrawMode = 'freehand';
+  private previewLine: SVGLineElement | null = null;
 
   constructor(svg: SVGSVGElement, wedgeLayer: SVGGElement, symmetryManager: SymmetryManager) {
     this.svg = svg;
     this.wedgeLayer = wedgeLayer;
     this.symmetryManager = symmetryManager;
     this.createSnapIndicator();
+    this.createPreviewLine();
   }
 
   /**
@@ -122,6 +211,27 @@ export class DrawingManager {
     this.snapIndicator.setAttribute('pointer-events', 'none');
     this.snapIndicator.style.display = 'none';
     this.svg.appendChild(this.snapIndicator);
+  }
+
+  /**
+   * Creates a preview line for line tool mode.
+   */
+  private createPreviewLine(): void {
+    this.previewLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    this.previewLine.setAttribute('stroke', '#0080ff');
+    this.previewLine.setAttribute('stroke-width', '2');
+    this.previewLine.setAttribute('stroke-dasharray', '5,5');
+    this.previewLine.setAttribute('pointer-events', 'none');
+    this.previewLine.style.display = 'none';
+    this.svg.appendChild(this.previewLine);
+  }
+
+  /**
+   * Sets the drawing mode.
+   */
+  public setMode(mode: DrawMode): void {
+    this.mode = mode;
+    this.hidePreviewLine();
   }
 
   /**
@@ -141,6 +251,28 @@ export class DrawingManager {
   private hideSnapIndicator(): void {
     if (this.snapIndicator) {
       this.snapIndicator.style.display = 'none';
+    }
+  }
+
+  /**
+   * Shows the preview line for line tool.
+   */
+  private showPreviewLine(x1: number, y1: number, x2: number, y2: number): void {
+    if (this.previewLine) {
+      this.previewLine.setAttribute('x1', x1.toString());
+      this.previewLine.setAttribute('y1', y1.toString());
+      this.previewLine.setAttribute('x2', x2.toString());
+      this.previewLine.setAttribute('y2', y2.toString());
+      this.previewLine.style.display = 'block';
+    }
+  }
+
+  /**
+   * Hides the preview line.
+   */
+  private hidePreviewLine(): void {
+    if (this.previewLine) {
+      this.previewLine.style.display = 'none';
     }
   }
 
@@ -207,38 +339,75 @@ export class DrawingManager {
    * Handles pointer down event to start a new stroke.
    */
   public handlePointerDown = (event: PointerEvent): void => {
+    // Ignore middle mouse button (used for panning)
+    if (event.button === 1) return;
+    
     let point = this.screenToSVG(event.clientX, event.clientY);
     
-    if (!isPointInWedge(point)) return;
-    
-    // Snap to nearby endpoints from the full snowflake
-    const snappedPoint = snapToNearestSnowflakeEndpoint(point, this.symmetryManager);
-    if (snappedPoint.x !== point.x || snappedPoint.y !== point.y) {
-      point = snappedPoint;
-      this.showSnapIndicator(point);
-      setTimeout(() => this.hideSnapIndicator(), 200);
-    }
-    
+    // Start drawing state even if outside wedge (allows drag-to-edge workflow)
     this.isDrawing = true;
-    this.currentStroke = [point];
     
-    // Create new path element
-    this.currentPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    this.currentPath.setAttribute('stroke-width', this.strokeWidth.toString());
-    this.currentPath.setAttribute('d', `M ${point.x} ${point.y}`);
-    this.wedgeLayer.appendChild(this.currentPath);
+    // If starting inside wedge, snap and begin the path
+    if (isPointInWedge(point)) {
+      // Snap to nearby endpoints from the full snowflake
+      // The snapped point might be slightly outside the wedge, which is OK
+      const snappedPoint = snapToNearestSnowflakeEndpoint(point, this.symmetryManager);
+      if (snappedPoint.x !== point.x || snappedPoint.y !== point.y) {
+        point = snappedPoint;
+        this.showSnapIndicator(point);
+        setTimeout(() => this.hideSnapIndicator(), 200);
+      }
+      
+      this.currentStroke = [point];
+      
+      // Create new path element
+      this.currentPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      this.currentPath.setAttribute('stroke-width', this.strokeWidth.toString());
+      this.currentPath.setAttribute('d', `M ${point.x} ${point.y}`);
+      this.wedgeLayer.appendChild(this.currentPath);
+    }
+    // If starting outside wedge, wait for pointermove to enter wedge
   };
 
   /**
    * Handles pointer move event to continue the current stroke.
    */
   public handlePointerMove = (event: PointerEvent): void => {
-    if (!this.isDrawing || !this.currentPath) return;
+    if (!this.isDrawing) return;
     
     const point = this.screenToSVG(event.clientX, event.clientY);
     
+    // Line mode: show preview even if mouse is outside (clip to boundary)
+    if (this.mode === 'line' && this.currentPath) {
+      const startPoint = this.currentStroke[0];
+      const clippedEnd = clipLineToWedge(startPoint, point);
+      this.showPreviewLine(startPoint.x, startPoint.y, clippedEnd.x, clippedEnd.y);
+      return;
+    }
+    
+    // For freehand mode or when creating initial path, need to be in wedge
     if (!isPointInWedge(point)) return;
     
+    // If no path yet (started outside wedge), create it now
+    if (!this.currentPath) {
+      // Snap to nearby endpoints
+      let startPoint = point;
+      const snappedPoint = snapToNearestSnowflakeEndpoint(point, this.symmetryManager);
+      if (snappedPoint.x !== point.x || snappedPoint.y !== point.y) {
+        startPoint = snappedPoint;
+        this.showSnapIndicator(startPoint);
+        setTimeout(() => this.hideSnapIndicator(), 200);
+      }
+      
+      this.currentStroke = [startPoint];
+      this.currentPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      this.currentPath.setAttribute('stroke-width', this.strokeWidth.toString());
+      this.currentPath.setAttribute('d', `M ${startPoint.x} ${startPoint.y}`);
+      this.wedgeLayer.appendChild(this.currentPath);
+      return;
+    }
+    
+    // Freehand mode: add points and update path
     this.currentStroke.push(point);
     
     // Update path
@@ -258,27 +427,56 @@ export class DrawingManager {
   /**
    * Handles pointer up event to complete the current stroke.
    */
-  public handlePointerUp = (): void => {
-    if (!this.isDrawing || !this.currentPath) return;
+  public handlePointerUp = (event: PointerEvent): void => {
+    if (!this.isDrawing) return;
     
     this.isDrawing = false;
+    this.hidePreviewLine();
+    
+    // If no path was created (pointer up outside wedge), just reset
+    if (!this.currentPath) {
+      this.currentStroke = [];
+      return;
+    }
     
     if (this.currentStroke.length > 0) {
-      // Snap the last point to nearby endpoints from the full snowflake
-      const lastPoint = this.currentStroke[this.currentStroke.length - 1];
-      const snappedEnd = snapToNearestSnowflakeEndpoint(lastPoint, this.symmetryManager);
-      
-      if (snappedEnd.x !== lastPoint.x || snappedEnd.y !== lastPoint.y) {
-        // Update the last point
-        this.currentStroke[this.currentStroke.length - 1] = snappedEnd;
+      // In line mode, add the end point and create a straight line
+      if (this.mode === 'line') {
+        const startPoint = this.currentStroke[0];
+        const currentPoint = this.screenToSVG(event.clientX, event.clientY);
         
-        // Update the path data
-        const pathData = pointsToPathData(this.currentStroke);
+        // Clip the line to wedge boundaries if needed
+        const clippedEnd = clipLineToWedge(startPoint, currentPoint);
+        
+        // Snap the clipped endpoint if it's near another endpoint
+        const snappedEnd = snapToNearestSnowflakeEndpoint(clippedEnd, this.symmetryManager);
+        this.currentStroke.push(snappedEnd);
+        
+        if (snappedEnd.x !== clippedEnd.x || snappedEnd.y !== clippedEnd.y) {
+          this.showSnapIndicator(snappedEnd);
+          setTimeout(() => this.hideSnapIndicator(), 300);
+        }
+        
+        // Create straight line path
+        const pathData = `M ${startPoint.x} ${startPoint.y} L ${snappedEnd.x} ${snappedEnd.y}`;
         this.currentPath.setAttribute('d', pathData);
+      } else {
+        // Freehand mode: snap the last point if possible
+        const lastPoint = this.currentStroke[this.currentStroke.length - 1];
+        const snappedEnd = snapToNearestSnowflakeEndpoint(lastPoint, this.symmetryManager);
         
-        // Show snap indicator briefly
-        this.showSnapIndicator(snappedEnd);
-        setTimeout(() => this.hideSnapIndicator(), 300);
+        if (snappedEnd.x !== lastPoint.x || snappedEnd.y !== lastPoint.y) {
+          // Update the last point
+          this.currentStroke[this.currentStroke.length - 1] = snappedEnd;
+          
+          // Update the path data
+          const pathData = pointsToPathData(this.currentStroke);
+          this.currentPath.setAttribute('d', pathData);
+          
+          // Show snap indicator briefly
+          this.showSnapIndicator(snappedEnd);
+          setTimeout(() => this.hideSnapIndicator(), 300);
+        }
       }
       
       const stroke: Stroke = {

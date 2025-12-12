@@ -8,7 +8,7 @@
 import { Point, Stroke } from './drawing';
 import { SymmetryManager } from './symmetry';
 
-const SNAP_THRESHOLD = 20; // pixels - distance within which points will snap (increased for easier snapping)
+const SNAP_THRESHOLD = 5; // pixels - distance within which points will snap
 
 /**
  * Gets the start and end points of a stroke.
@@ -93,6 +93,8 @@ export function snapToNearestSnowflakeEndpoint(
   const allEndpoints = symmetryManager.getAllBakedEndpoints();
   let nearest: { point: Point; distance: number } | null = null;
   
+  console.log(`[Snap] Checking ${allEndpoints.length} endpoints for point (${point.x.toFixed(1)}, ${point.y.toFixed(1)})`);
+  
   for (const endpoint of allEndpoints) {
     const dist = distance(point, endpoint);
     
@@ -104,9 +106,11 @@ export function snapToNearestSnowflakeEndpoint(
   }
   
   if (nearest) {
+    console.log(`[Snap] Found snap target at (${nearest.point.x.toFixed(1)}, ${nearest.point.y.toFixed(1)}), distance: ${nearest.distance.toFixed(1)}`);
     return nearest.point;
   }
   
+  console.log('[Snap] No snap target found within threshold');
   return point;
 }
 

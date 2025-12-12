@@ -15,7 +15,13 @@
           <svg width="20" height="20" viewBox="0 0 20 20">
             <path d="M2 18 L18 2" stroke="currentColor" stroke-width="2" fill="none"/>
           </svg>
-          Draw
+          Freehand
+        </button>
+        <button id="btn-line" title="Draw straight lines">
+          <svg width="20" height="20" viewBox="0 0 20 20">
+            <line x1="3" y1="17" x2="17" y2="3" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          Line
         </button>
         <button id="btn-undo" title="Undo last stroke">
           <svg width="20" height="20" viewBox="0 0 20 20">
@@ -29,13 +35,6 @@
           </svg>
           Clear
         </button>
-        <div class="divider"></div>
-        <label for="stroke-width">Stroke:</label>
-        <select id="stroke-width">
-          <option value="1">Thin</option>
-          <option value="2" selected>Medium</option>
-          <option value="3">Thick</option>
-        </select>
         <div class="divider"></div>
         <button id="btn-toggle-fill" title="Toggle fill visualization to see cut areas">
           <svg width="20" height="20" viewBox="0 0 20 20">
@@ -57,7 +56,7 @@
         <defs>
           <clipPath id="wedge-clip">
             <!-- 30° wedge clip path (1/12 of circle), calculated from center (500, 500) -->
-            <path d="M 500 500 L 500 0 L 759.8076 150 Z"/>
+            <path d="M 500 500 L 500 100 L 700 153.59 Z"/>
           </clipPath>
         </defs>
         <g id="background-layer">
@@ -65,7 +64,7 @@
           <circle cx="500" cy="500" r="400" fill="none" stroke="#e0e0e0" stroke-width="1"/>
           <!-- Guide lines for the 12 sections -->
           <line x1="500" y1="500" x2="500" y2="100" stroke="#f0f0f0" stroke-width="1"/>
-          <line x1="500" y1="500" x2="759.8076" y2="150" stroke="#f0f0f0" stroke-width="1"/>
+          <line x1="500" y1="500" x2="700" y2="153.59" stroke="#f0f0f0" stroke-width="1"/>
         </g>
         <g id="snowflake-layer">
           <!-- Twelve-fold symmetry with mirroring -->
@@ -75,7 +74,7 @@
         </g>
         <g id="wedge-outline">
           <!-- Visible wedge boundary (30° wedge) -->
-          <path d="M 500 500 L 500 0 L 759.8076 150 Z" fill="none" stroke="#999" stroke-width="2" stroke-dasharray="5,5"/>
+          <path d="M 500 500 L 500 100 L 700 153.59 Z" fill="none" stroke="#999" stroke-width="2" stroke-dasharray="5,5"/>
         </g>
       </svg>
     </main>

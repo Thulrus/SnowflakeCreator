@@ -21,11 +21,11 @@ export class UIManager {
 
   // UI elements
   private btnDraw: HTMLButtonElement;
+  private btnLine: HTMLButtonElement;
   private btnUndo: HTMLButtonElement;
   private btnClear: HTMLButtonElement;
   private btnExport: HTMLButtonElement;
   private btnToggleFill: HTMLButtonElement;
-  private strokeWidthSelect: HTMLSelectElement;
 
   // Zoom and pan state
   private viewBox = { x: 0, y: 0, width: 1000, height: 1000 };
@@ -48,11 +48,11 @@ export class UIManager {
 
     // Get UI elements
     this.btnDraw = document.getElementById('btn-draw') as HTMLButtonElement;
+    this.btnLine = document.getElementById('btn-line') as HTMLButtonElement;
     this.btnUndo = document.getElementById('btn-undo') as HTMLButtonElement;
     this.btnClear = document.getElementById('btn-clear') as HTMLButtonElement;
     this.btnExport = document.getElementById('btn-export') as HTMLButtonElement;
     this.btnToggleFill = document.getElementById('btn-toggle-fill') as HTMLButtonElement;
-    this.strokeWidthSelect = document.getElementById('stroke-width') as HTMLSelectElement;
 
     this.initializeEventListeners();
     this.enableDrawMode();
@@ -64,16 +64,11 @@ export class UIManager {
   private initializeEventListeners(): void {
     // Toolbar buttons
     this.btnDraw.addEventListener('click', () => this.enableDrawMode());
+    this.btnLine.addEventListener('click', () => this.enableLineMode());
     this.btnUndo.addEventListener('click', () => this.handleUndo());
     this.btnClear.addEventListener('click', () => this.handleClear());
     this.btnExport.addEventListener('click', () => this.handleExport());
     this.btnToggleFill.addEventListener('click', () => this.handleToggleFill());
-
-    // Stroke width selector
-    this.strokeWidthSelect.addEventListener('change', () => {
-      const width = parseInt(this.strokeWidthSelect.value, 10);
-      this.drawingManager.setStrokeWidth(width);
-    });
 
     // Zoom with mouse wheel
     this.svg.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
@@ -93,7 +88,20 @@ export class UIManager {
    */
   private enableDrawMode(): void {
     this.btnDraw.classList.add('active');
+    this.btnLine.classList.remove('active');
     this.svg.style.cursor = 'crosshair';
+    this.drawingManager.setMode('freehand');
+    this.drawingManager.enable();
+  }
+
+  /**
+   * Enables line mode.
+   */
+  private enableLineMode(): void {
+    this.btnLine.classList.add('active');
+    this.btnDraw.classList.remove('active');
+    this.svg.style.cursor = 'crosshair';
+    this.drawingManager.setMode('line');
     this.drawingManager.enable();
   }
 
