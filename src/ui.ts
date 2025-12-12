@@ -402,7 +402,7 @@ export class UIManager {
       // Calculate pinch-zoom
       const currentDistance = this.getTouchDistance(touch1, touch2);
       const scaleChange = currentDistance / this.touchStartDistance;
-      this.scale = this.touchStartScale / scaleChange;
+      this.scale = this.touchStartScale * scaleChange;
       this.scale = Math.max(0.1, Math.min(10, this.scale));
 
       // Calculate center point for zoom
