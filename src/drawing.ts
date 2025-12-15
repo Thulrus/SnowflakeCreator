@@ -20,6 +20,10 @@ export interface Stroke {
   pathElement: SVGPathElement;
 }
 
+// Path smoothing constants
+const RDP_EPSILON = 2.0; // Distance threshold for Ramer-Douglas-Peucker simplification
+const CATMULL_ROM_TENSION = 6; // Tension parameter for Catmull-Rom to Bezier conversion
+
 /**
  * Checks if a point is inside the 30° wedge.
  * The wedge is defined from center (500, 500) with edges at 0° and 30°.
@@ -125,8 +129,72 @@ export function clipLineToWedge(start: Point, end: Point, center: Point = { x: 5
 }
 
 /**
+ * Calculates the perpendicular distance from a point to a line segment.
+ * Used in the Ramer-Douglas-Peucker algorithm.
+ * 
+ * @param point - The point to measure
+ * @param lineStart - Start of the line segment
+ * @param lineEnd - End of the line segment
+ * @returns The perpendicular distance
+ */
+function perpendicularDistance(point: Point, lineStart: Point, lineEnd: Point): number {
+  const dx = lineEnd.x - lineStart.x;
+  const dy = lineEnd.y - lineStart.y;
+  
+  if (dx === 0 && dy === 0) {
+    // Line start and end are the same point
+    const distX = point.x - lineStart.x;
+    const distY = point.y - lineStart.y;
+    return Math.sqrt(distX * distX + distY * distY);
+  }
+  
+  const numerator = Math.abs(dy * point.x - dx * point.y + lineEnd.x * lineStart.y - lineEnd.y * lineStart.x);
+  const denominator = Math.sqrt(dx * dx + dy * dy);
+  
+  return numerator / denominator;
+}
+
+/**
+ * Simplifies a path using the Ramer-Douglas-Peucker algorithm.
+ * Reduces the number of points while preserving the overall shape.
+ * 
+ * @param points - Array of points to simplify
+ * @param epsilon - Distance threshold for simplification (larger = more aggressive)
+ * @returns Simplified array of points
+ */
+export function simplifyPath(points: Point[], epsilon: number = RDP_EPSILON): Point[] {
+  if (points.length <= 2) return points;
+  
+  // Find the point with the maximum distance from the line segment
+  let maxDistance = 0;
+  let maxIndex = 0;
+  const end = points.length - 1;
+  
+  for (let i = 1; i < end; i++) {
+    const distance = perpendicularDistance(points[i], points[0], points[end]);
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      maxIndex = i;
+    }
+  }
+  
+  // If max distance is greater than epsilon, recursively simplify
+  if (maxDistance > epsilon) {
+    // Recursive call
+    const leftSegment = simplifyPath(points.slice(0, maxIndex + 1), epsilon);
+    const rightSegment = simplifyPath(points.slice(maxIndex), epsilon);
+    
+    // Combine results (remove duplicate point at maxIndex)
+    return leftSegment.slice(0, -1).concat(rightSegment);
+  } else {
+    // All points are close to the line, return just the endpoints
+    return [points[0], points[end]];
+  }
+}
+
+/**
  * Converts an array of points into an SVG path data string.
- * Uses quadratic curves for smoother paths with proper control point calculation.
+ * Uses Catmull-Rom splines for smoother paths with better interpolation.
  * 
  * @param points - Array of points to convert
  * @returns SVG path data string
@@ -145,30 +213,23 @@ export function pointsToPathData(points: Point[]): string {
     return pathData;
   }
   
-  // Use quadratic curves with proper smoothing
-  // First segment: line to first point
-  pathData += ` L ${points[1].x} ${points[1].y}`;
-  
-  // Middle segments: use quadratic curves with the current point as control
-  for (let i = 1; i < points.length - 1; i++) {
+  // Use Catmull-Rom splines for smooth interpolation
+  // This creates a curve that passes through all points smoothly
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = i > 0 ? points[i - 1] : points[i];
     const p1 = points[i];
     const p2 = points[i + 1];
+    const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
     
-    // Calculate a smooth control point
-    // Use the current point but smooth it based on neighbors
-    const controlX = p1.x;
-    const controlY = p1.y;
+    // Convert Catmull-Rom to cubic Bezier
+    // Control points for cubic Bezier curve
+    const cp1x = p1.x + (p2.x - p0.x) / CATMULL_ROM_TENSION;
+    const cp1y = p1.y + (p2.y - p0.y) / CATMULL_ROM_TENSION;
+    const cp2x = p2.x - (p3.x - p1.x) / CATMULL_ROM_TENSION;
+    const cp2y = p2.y - (p3.y - p1.y) / CATMULL_ROM_TENSION;
     
-    // Endpoint is midway to next point for smooth connection
-    const endX = (p1.x + p2.x) / 2;
-    const endY = (p1.y + p2.y) / 2;
-    
-    pathData += ` Q ${controlX} ${controlY} ${endX} ${endY}`;
+    pathData += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`;
   }
-  
-  // Last segment: line to the final point
-  const lastPoint = points[points.length - 1];
-  pathData += ` L ${lastPoint.x} ${lastPoint.y}`;
   
   return pathData;
 }
@@ -461,7 +522,11 @@ export class DrawingManager {
         const pathData = `M ${startPoint.x} ${startPoint.y} L ${snappedEnd.x} ${snappedEnd.y}`;
         this.currentPath.setAttribute('d', pathData);
       } else {
-        // Freehand mode: snap the last point if possible
+        // Freehand mode: simplify and smooth the path, then snap the last point if possible
+        // Simplify the path to reduce jaggedness
+        const simplifiedPoints = simplifyPath(this.currentStroke, RDP_EPSILON);
+        this.currentStroke = simplifiedPoints;
+        
         const lastPoint = this.currentStroke[this.currentStroke.length - 1];
         const snappedEnd = snapToNearestSnowflakeEndpoint(lastPoint, this.symmetryManager);
         
@@ -469,14 +534,14 @@ export class DrawingManager {
           // Update the last point
           this.currentStroke[this.currentStroke.length - 1] = snappedEnd;
           
-          // Update the path data
-          const pathData = pointsToPathData(this.currentStroke);
-          this.currentPath.setAttribute('d', pathData);
-          
           // Show snap indicator briefly
           this.showSnapIndicator(snappedEnd);
           setTimeout(() => this.hideSnapIndicator(), 300);
         }
+        
+        // Update the path data with simplified and smoothed curve
+        const pathData = pointsToPathData(this.currentStroke);
+        this.currentPath.setAttribute('d', pathData);
       }
       
       const stroke: Stroke = {
