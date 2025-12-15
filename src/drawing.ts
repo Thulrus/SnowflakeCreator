@@ -20,6 +20,10 @@ export interface Stroke {
   pathElement: SVGPathElement;
 }
 
+// Path smoothing constants
+const RDP_EPSILON = 2.0; // Distance threshold for Ramer-Douglas-Peucker simplification
+const CATMULL_ROM_TENSION = 6; // Tension parameter for Catmull-Rom to Bezier conversion
+
 /**
  * Checks if a point is inside the 30° wedge.
  * The wedge is defined from center (500, 500) with edges at 0° and 30°.
@@ -158,7 +162,7 @@ function perpendicularDistance(point: Point, lineStart: Point, lineEnd: Point): 
  * @param epsilon - Distance threshold for simplification (larger = more aggressive)
  * @returns Simplified array of points
  */
-export function simplifyPath(points: Point[], epsilon: number = 2.0): Point[] {
+export function simplifyPath(points: Point[], epsilon: number = RDP_EPSILON): Point[] {
   if (points.length <= 2) return points;
   
   // Find the point with the maximum distance from the line segment
@@ -219,10 +223,10 @@ export function pointsToPathData(points: Point[]): string {
     
     // Convert Catmull-Rom to cubic Bezier
     // Control points for cubic Bezier curve
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    const cp1x = p1.x + (p2.x - p0.x) / CATMULL_ROM_TENSION;
+    const cp1y = p1.y + (p2.y - p0.y) / CATMULL_ROM_TENSION;
+    const cp2x = p2.x - (p3.x - p1.x) / CATMULL_ROM_TENSION;
+    const cp2y = p2.y - (p3.y - p1.y) / CATMULL_ROM_TENSION;
     
     pathData += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`;
   }
@@ -520,7 +524,7 @@ export class DrawingManager {
       } else {
         // Freehand mode: simplify and smooth the path, then snap the last point if possible
         // Simplify the path to reduce jaggedness
-        const simplifiedPoints = simplifyPath(this.currentStroke, 2.0);
+        const simplifiedPoints = simplifyPath(this.currentStroke, RDP_EPSILON);
         this.currentStroke = simplifiedPoints;
         
         const lastPoint = this.currentStroke[this.currentStroke.length - 1];
